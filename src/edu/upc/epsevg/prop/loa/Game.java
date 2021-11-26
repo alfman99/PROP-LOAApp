@@ -5,7 +5,7 @@ import edu.upc.epsevg.prop.loa.IPlayer;
 import edu.upc.epsevg.prop.loa.players.*;
 
 import javax.swing.SwingUtilities;
-
+//test
 /**
  * Lines Of Action: el joc de taula.
  * @author bernat
