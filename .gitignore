@@ -25,3 +25,5 @@ hs_err_pid*
 /Robocode/build/
 /Robocode/dist/
 /nbproject/private/
+/build/
+/dist/
