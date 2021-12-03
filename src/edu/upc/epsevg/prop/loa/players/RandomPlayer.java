@@ -39,6 +39,12 @@ public class RandomPlayer implements IPlayer, IAuto {
      */
     @Override
     public Move move(GameStatus s) {
+        
+        try {
+            Thread.sleep(5000);
+        } catch (InterruptedException ex) {
+            Logger.getLogger(RandomPlayer.class.getName()).log(Level.SEVERE, null, ex);
+        }
 
         CellType color = s.getCurrentPlayer();
         this.s = s;

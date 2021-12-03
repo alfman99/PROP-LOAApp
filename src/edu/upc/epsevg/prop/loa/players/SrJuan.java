@@ -16,6 +16,60 @@ import java.util.ArrayList;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
+
+/**
+ * 
+ * @author https://www.techiedelight.com/implement-pair-class-java/
+ * @param <U>
+ * @param <V> 
+ */
+class Pair<U, V> {
+    private final U first;       // the first field of a pair
+    private final V second;      // the second field of a pair
+ 
+    // Constructs a new pair with specified values
+    public Pair(U first, V second)
+    {
+        this.first = first;
+        this.second = second;
+    }
+ 
+    @Override
+    // Checks specified object is "equal to" the current object or not
+    public boolean equals(Object o)
+    {
+        if (this == o) {
+            return true;
+        }
+ 
+        if (o == null || getClass() != o.getClass()) {
+            return false;
+        }
+ 
+        Pair<?, ?> pair = (Pair<?, ?>) o;
+ 
+        // call `equals()` method of the underlying objects
+        if (!first.equals(pair.first)) {
+            return false;
+        }
+        return second.equals(pair.second);
+    }
+  
+    @Override
+    public String toString() {
+        return "(" + first + ", " + second + ")";
+    }
+
+    public U getFirst() {
+        return first;
+    }
+
+    public V getSecond() {
+        return second;
+    }
+ 
+}
+
 /**
  *
  * @author srimp
@@ -24,12 +78,14 @@ public class SrJuan implements IPlayer, IAuto {
         
     private final SearchType executionType;
     private CellType nuestroCell;
-    private int profundidadMax;
+    private CellType enemigoCell;
+    private final int profundidadMax;
     private boolean timeout;
 
     public SrJuan(SearchType minimax, int profundidadMax) {
         this.executionType = minimax;
         this.nuestroCell = CellType.EMPTY;
+        this.enemigoCell = CellType.EMPTY;
         this.profundidadMax = profundidadMax;
         this.timeout = false;
     }
@@ -38,24 +94,66 @@ public class SrJuan implements IPlayer, IAuto {
     public Move move(GameStatus gs) {
         
         this.timeout = false;
-        
-        if (this.nuestroCell == CellType.EMPTY) {
+                
+        if (this.nuestroCell == CellType.EMPTY || this.enemigoCell == CellType.EMPTY) {
             this.nuestroCell = gs.getCurrentPlayer();
+            this.enemigoCell = CellType.opposite(this.nuestroCell);
+        }       
+        
+        Pair<Move, Double> test = null;
+        
+        switch (this.executionType) {
+            case MINIMAX_IDS: {
+                try {
+                    test = obtenerMovimiento_IDS(gs);
+                }
+                catch (RuntimeException ex) {
+                    System.out.println(ex.getMessage());
+                    Point pieza = gs.getPiece(this.enemigoCell, 0);
+                    ArrayList movimiento = gs.getMoves(pieza);
+                    return new Move(pieza, (Point) movimiento.get(0), 0, 0, SearchType.MINIMAX_IDS);
+                }
+                break;
+            }
+            case MINIMAX:
+            default: {
+                test = obtenerMovimiento(gs, this.profundidadMax);
+                break;
+            }
         }
         
-        Move test = obtenerMovimiento(gs, this.profundidadMax);
-        
-        System.out.println(test.getMaxDepthReached());
-        System.out.println(test.getNumerOfNodesExplored());
+        System.out.println(test.getFirst().getMaxDepthReached());
+        System.out.println(test.getFirst().getNumerOfNodesExplored());
                 
-        return test;
+        return test.getFirst();
     }
     
     private double evalTablero(GameStatus gs) {
         return 5.3;
     }
     
-    private Move obtenerMovimiento (GameStatus gs, int profundidadMaxima) {
+    private Pair<Move, Double> obtenerMovimiento_IDS (GameStatus gs) {
+        int i = 1;
+        Pair<Move, Double> mejorMov = null;
+        while (!this.timeout) {
+            Pair<Move, Double> aux = null;
+            try {
+                aux = obtenerMovimiento(gs, i);
+                mejorMov = aux;
+            }
+            catch (RuntimeException ex) {
+                System.out.println(ex.getMessage());
+            }
+            mejorMov.getFirst().setMaxDepthReached(i);
+            i++;
+        }
+        if (mejorMov == null) {
+            throw new RuntimeException("No se ha completado ni el primer nivel IDS");
+        }
+        return mejorMov;
+    }
+        
+    private Pair<Move, Double> obtenerMovimiento (GameStatus gs, int profundidadMaxima) {
         double mejorHeur = Double.NEGATIVE_INFINITY;
         
         Move mejorMovimiento = null;
@@ -65,18 +163,23 @@ public class SrJuan implements IPlayer, IAuto {
             Point pieza = gs.getPiece(this.nuestroCell, i);
             ArrayList<Point> movimientos = gs.getMoves(pieza);
             for (Point movimiento : movimientos) {
-                if (this.timeout && this.executionType == SearchType.MINIMAX_IDS) {
-                    return mejorMovimiento;
-                }
                 Move movimientoActual = new Move(pieza, movimiento, 0, 0, this.executionType);
                 double alfa = Double.NEGATIVE_INFINITY;
                 GameStatus aux = new GameStatus(gs);
                 aux.movePiece(pieza, movimiento);
                 if (aux.isGameOver()) {
-                    return movimientoActual;
+                    return new Pair<>(movimientoActual, Double.POSITIVE_INFINITY);
                 }
                 else {
-                    alfa = minimax(aux, movimientoActual, profundidadMaxima - 1, mejorHeur, Double.POSITIVE_INFINITY, false);
+                    if (this.timeout && this.executionType == SearchType.MINIMAX_IDS) {
+                        throw new RuntimeException("Timeout obtenerMov");
+                    }
+                    try {
+                        alfa = minimax(aux, movimientoActual, profundidadMaxima - 1, mejorHeur, Double.POSITIVE_INFINITY, false);
+                    }
+                    catch (RuntimeException ex) {
+                        throw new RuntimeException(ex.getMessage());
+                    }
                     if (alfa > mejorHeur || mejorMovimiento == null) {
                         mejorMovimiento = movimientoActual;
                         mejorHeur = alfa;
@@ -84,15 +187,14 @@ public class SrJuan implements IPlayer, IAuto {
                 }
             }
         }
-        return mejorMovimiento;
+        mejorMovimiento.setMaxDepthReached(this.profundidadMax);
+        return new Pair<>(mejorMovimiento, mejorHeur);
     }
     
     private double minimax (GameStatus gs, Move movPrincipalActual, int profundidad, Double alfa, Double beta, boolean isMax) {
         
-        movPrincipalActual.setMaxDepthReached(profundidad);
-        
         if (this.timeout && this.executionType == SearchType.MINIMAX_IDS) {
-            return isMax ? alfa : beta;
+            throw new RuntimeException("Timeout minimax");
         }
         
         if (profundidad <= 0) {
@@ -110,7 +212,12 @@ public class SrJuan implements IPlayer, IAuto {
                     GameStatus aux = new GameStatus(gs);
                     aux.movePiece(pieza, movimiento);
                     if (aux.isGameOver()) {
-                        return Double.POSITIVE_INFINITY;
+                        if (aux.GetWinner() == this.nuestroCell) {
+                            return Double.POSITIVE_INFINITY;
+                        }
+                        else {
+                            return Double.NEGATIVE_INFINITY;
+                        }
                     }
                     else {
                         nuevaAlfa = Math.max(nuevaAlfa, minimax(aux, movPrincipalActual, profundidad - 1, alfa, beta, false));
@@ -125,22 +232,20 @@ public class SrJuan implements IPlayer, IAuto {
         }
         else {
             double nuevaBeta = Double.POSITIVE_INFINITY;
-            CellType enemigo;
-            if (this.nuestroCell == CellType.PLAYER1) {
-                enemigo = CellType.PLAYER2;
-            }
-            else {
-                enemigo = CellType.PLAYER1;
-            }
-            int piezasRestantes = gs.getNumberOfPiecesPerColor(enemigo);
+            int piezasRestantes = gs.getNumberOfPiecesPerColor(this.enemigoCell);
             for (int i = 0; i < piezasRestantes; i++) {
-                Point pieza = gs.getPiece(enemigo, i);
+                Point pieza = gs.getPiece(this.enemigoCell, i);
                 ArrayList<Point> movimientos = gs.getMoves(pieza);
                 for(Point movimiento : movimientos) {
                     GameStatus aux = new GameStatus(gs);
                     aux.movePiece(pieza, movimiento);
                     if (aux.isGameOver()) {
-                        return Double.NEGATIVE_INFINITY;
+                        if (aux.GetWinner() == this.nuestroCell) {
+                            return Double.NEGATIVE_INFINITY;
+                        }
+                        else {
+                            return Double.POSITIVE_INFINITY;
+                        }
                     }
                     else {
                         nuevaBeta = Math.min(nuevaBeta, minimax(aux, movPrincipalActual, profundidad - 1, alfa, beta, true));
