@@ -127,9 +127,21 @@ public class SrJuan implements IPlayer, IAuto {
                 
         return test.getFirst();
     }
+    //EMPEZAR DE NUEVO ESTE METODO
+    private double mediaAlCentro (double sumaTotal) {
+        return 0.0;
+    }
+    private double distanciaCentro (Point pieza, GameStatus gs){
+        Point center = new Point(gs.getSize()/2, gs.getSize()/2);
+        double diffX = center.getX() - pieza.getX();
+        double diffY = center.getY() - pieza.getY();
+
+        return Math.sqrt(Math.pow(diffX, 2) + Math.pow(diffY, 2));
+    }
     
     private double evalTablero(GameStatus gs) {
-        return 5.3;
+        
+        return 0.0;
     }
     
     private Pair<Move, Double> obtenerMovimiento_IDS (GameStatus gs) {
