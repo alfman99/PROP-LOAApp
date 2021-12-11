@@ -21,8 +21,8 @@ public class ZobristHashing {
     public ZobristHashing(Integer mida){
         this.tablero = new int[mida][mida][2];
         for (int i = 0; i<this.tablero.length; i++){
-            for (int j = 0; j < mida; i++) {
-                for (int k = 0; k < mida; i++) {
+            for (int j = 0; j < mida; j++) {
+                for (int k = 0; k < mida; k++) {
                     this.tablero[i][j][k] = (int) Math.random();
                 }
             }
@@ -30,7 +30,7 @@ public class ZobristHashing {
         this.hashValue = 0;
     }
     public int update(int color, int x, int y){//Sino patino con esto hacemos la xor
-        return this.hashValue ^= this.tablero[color][x][y];
+        return this.hashValue ^= this.tablero[x][y][color];
     }
     
     public int add(CellType c, Point p) {
