@@ -10,6 +10,8 @@ import java.awt.Point;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 class Pair<U, V> {
 
@@ -48,6 +50,8 @@ public class SrJuan implements IPlayer, IAuto {
     private final int profundidadMax;
     private boolean timeout;
     private HashMap<QuadType, Integer> quadsMap;
+    private double  heurNuestro;
+    private double heurEnemigo;
 
     public SrJuan(SearchType minimax, int profundidadMax) {
         this.executionType = minimax;
@@ -56,6 +60,8 @@ public class SrJuan implements IPlayer, IAuto {
         this.profundidadMax = profundidadMax;
         this.timeout = false;
         this.quadsMap = new HashMap<>();
+        this.heurNuestro = 0.0;
+        this.heurEnemigo = 0.0;
     }
 
     @Override
@@ -150,6 +156,7 @@ public class SrJuan implements IPlayer, IAuto {
     }
 
     private double evalTablero(GameStatus gs) {
+        /*
         this.quadsMap = new HashMap<>();
         double heurVal = 0.0D;
         int numPiezas = gs.getNumberOfPiecesPerColor(this.nuestroCell);
@@ -172,7 +179,87 @@ public class SrJuan implements IPlayer, IAuto {
                 }
             }
         }
+        
         System.out.println(this.quadsMap);
+        return (heurVal / 4.0D) / (distanceCenterTotal / numPiezas);
+        */  
+  
+        Thread heur1 = new Thread(() -> {
+            this.heurNuestro = evalTableroNuestro(gs);
+        });
+        
+        Thread heur2 = new Thread(() -> {
+            this.heurEnemigo = evalTableroEnemigo(gs);
+        });
+        heur1.start();
+        heur2.start();
+        try {
+            heur1.join();
+        } catch (InterruptedException ex) {
+            Logger.getLogger(SrJuan.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        try {
+            heur2.join();
+        } catch (InterruptedException ex) {
+            Logger.getLogger(SrJuan.class.getName()).log(Level.SEVERE, null, ex);
+        }
+        
+        if (this.heurNuestro > this.heurEnemigo) return this.heurNuestro;
+        else if (this.heurNuestro == this.heurEnemigo) return this.heurNuestro-(0.25*this.heurEnemigo);
+        else return this.heurNuestro/this.heurEnemigo;
+
+    }
+    
+    private double evalTableroNuestro(GameStatus gs) {
+        this.quadsMap = new HashMap<>();
+        double heurVal = 0.0D;
+        int numPiezas = gs.getNumberOfPiecesPerColor(this.nuestroCell);
+        double distanceCenterTotal = 0.0D;
+        for (int i = 0; i < numPiezas; i++) {
+            Point pieza = gs.getPiece(this.nuestroCell, i);
+            distanceCenterTotal += distanceToCenter(gs, pieza);
+            getQuads(gs, pieza);
+            for (Map.Entry<QuadType, Integer> entry : this.quadsMap.entrySet()) {
+                switch (entry.getKey()) {
+                    case Q1:
+                        heurVal += entry.getValue();
+                        continue;
+                    case Q3:
+                        heurVal -= entry.getValue();
+                        continue;
+                    case Qd:
+                        heurVal -= 2 * entry.getValue();
+                        continue;
+                }
+            }
+        }
+        //System.out.println(this.quadsMap);
+        return (heurVal / 4.0D) / (distanceCenterTotal / numPiezas);
+    }
+    private double evalTableroEnemigo(GameStatus gs) {
+        this.quadsMap = new HashMap<>();
+        double heurVal = 0.0D;
+        int numPiezas = gs.getNumberOfPiecesPerColor(this.enemigoCell);
+        double distanceCenterTotal = 0.0D;
+        for (int i = 0; i < numPiezas; i++) {
+            Point pieza = gs.getPiece(this.enemigoCell, i);
+            distanceCenterTotal += distanceToCenter(gs, pieza);
+            getQuads(gs, pieza);
+            for (Map.Entry<QuadType, Integer> entry : this.quadsMap.entrySet()) {
+                switch (entry.getKey()) {
+                    case Q1:
+                        heurVal += entry.getValue();
+                        continue;
+                    case Q3:
+                        heurVal -= entry.getValue();
+                        continue;
+                    case Qd:
+                        heurVal -= 2 * entry.getValue();
+                        continue;
+                }
+            }
+        }
+       // System.out.println(this.quadsMap);
         return (heurVal / 4.0D) / (distanceCenterTotal / numPiezas);
     }
 
