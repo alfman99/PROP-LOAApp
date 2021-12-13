@@ -10,40 +10,8 @@ import java.awt.Point;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Callable;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
-class Pair<U, V> {
-
-    private final U first;
-    private final V second;
-
-    // Constructs a new pair with specified values
-    Pair(U first, V second) {
-        this.first = first;
-        this.second = second;
-    }
-
-    @Override
-    public String toString() {
-        return "(" + first + ", " + second + ")";
-    }
-
-    public U getFirst() {
-        return first;
-    }
-
-    public V getSecond() {
-        return second;
-    }
-}
-
-enum QuadType {
-    Q1, Q2, Q3, Q4, Qd;
-}
-
-public class SrJuan implements IPlayer, IAuto {
+public class SrJuanV2 implements IPlayer, IAuto {
 
     private final SearchType executionType;
     private CellType nuestroCell;
@@ -52,10 +20,7 @@ public class SrJuan implements IPlayer, IAuto {
     private boolean timeout;
     private HashMap<QuadType, Integer> quadsMap;
 
-    // para la paralelización
-    private double heurEnemigo;
-
-    public SrJuan(SearchType minimax, int profundidadMax) {
+    public SrJuanV2(SearchType minimax, int profundidadMax) {
         this.executionType = minimax;
         this.nuestroCell = CellType.EMPTY;
         this.enemigoCell = CellType.EMPTY;
@@ -67,8 +32,6 @@ public class SrJuan implements IPlayer, IAuto {
     @Override
     public Move move(GameStatus gs) {
         this.timeout = false;
-        this.heurEnemigo = 0.0D;
-
         if (this.nuestroCell == CellType.EMPTY || this.enemigoCell == CellType.EMPTY) {
             this.nuestroCell = gs.getCurrentPlayer();
             this.enemigoCell = CellType.opposite(this.nuestroCell);
@@ -116,7 +79,8 @@ public class SrJuan implements IPlayer, IAuto {
             case 2: {
                 if ((type[0] == true && type[3] == true) || (type[1] == true && type[2] == true)) {
                     return QuadType.Qd;
-                } else {
+                }
+                else {
                     return QuadType.Q2;
                 }
             }
@@ -157,41 +121,12 @@ public class SrJuan implements IPlayer, IAuto {
     }
 
     private double evalTablero(GameStatus gs) {
-
-        double heurNuestro;
-
-        Thread calcHeurEnemigo = new Thread(() -> {
-            this.heurEnemigo = calcEvalTablero(gs, this.enemigoCell);
-        });
-        calcHeurEnemigo.start();
-
-        heurNuestro = calcEvalTablero(gs, this.nuestroCell);
-
-        try {
-            calcHeurEnemigo.join();
-        } catch (InterruptedException ex) {
-            Logger.getLogger(SrJuan.class.getName()).log(Level.SEVERE, null, ex);
-        }
-        
-        if (heurNuestro > this.heurEnemigo){
-            return heurNuestro;
-        }
-        else if (heurNuestro == this.heurEnemigo){
-            return heurNuestro-(0.25 * this.heurEnemigo);
-        }
-        else{
-            return heurNuestro / this.heurEnemigo;
-        }
-
-    }
-
-    private double calcEvalTablero(GameStatus gs, CellType jugador) {
         this.quadsMap = new HashMap<>();
         double heurVal = 0.0D;
-        int numPiezas = gs.getNumberOfPiecesPerColor(jugador);
+        int numPiezas = gs.getNumberOfPiecesPerColor(this.nuestroCell);
         double distanceCenterTotal = 0.0D;
         for (int i = 0; i < numPiezas; i++) {
-            Point pieza = gs.getPiece(jugador, i);
+            Point pieza = gs.getPiece(this.nuestroCell, i);
             distanceCenterTotal += distanceToCenter(gs, pieza);
             getQuads(gs, pieza);
             for (Map.Entry<QuadType, Integer> entry : this.quadsMap.entrySet()) {
@@ -208,7 +143,7 @@ public class SrJuan implements IPlayer, IAuto {
                 }
             }
         }
-
+        
         return (heurVal / 4.0D) / (distanceCenterTotal / numPiezas);
     }
 
@@ -297,28 +232,30 @@ public class SrJuan implements IPlayer, IAuto {
             }
             return nuevaAlfa;
         }
-        double nuevaBeta = Double.POSITIVE_INFINITY;
-        int piezasRestantes = gs.getNumberOfPiecesPerColor(this.enemigoCell);
-        for (int i = 0; i < piezasRestantes; i++) {
-            Point pieza = gs.getPiece(this.enemigoCell, i);
-            ArrayList<Point> movimientos = gs.getMoves(pieza);
-            for (Point movimiento : movimientos) {
-                GameStatus aux = new GameStatus(gs);
-                aux.movePiece(pieza, movimiento);
-                if (aux.isGameOver()) {
-                    if (aux.GetWinner() == this.nuestroCell) {
-                        return Double.NEGATIVE_INFINITY;
+        else {
+            double nuevaBeta = Double.POSITIVE_INFINITY;
+            int piezasRestantes = gs.getNumberOfPiecesPerColor(this.enemigoCell);
+            for (int i = 0; i < piezasRestantes; i++) {
+                Point pieza = gs.getPiece(this.enemigoCell, i);
+                ArrayList<Point> movimientos = gs.getMoves(pieza);
+                for (Point movimiento : movimientos) {
+                    GameStatus aux = new GameStatus(gs);
+                    aux.movePiece(pieza, movimiento);
+                    if (aux.isGameOver()) {
+                        if (aux.GetWinner() == this.nuestroCell) {
+                            return Double.NEGATIVE_INFINITY;
+                        }
+                        return Double.POSITIVE_INFINITY;
                     }
-                    return Double.POSITIVE_INFINITY;
-                }
-                nuevaBeta = Math.min(nuevaBeta, minimax(aux, movPrincipalActual, profundidad - 1, alfa, beta, true));
-                beta = Math.min(nuevaBeta, beta);
-                if (alfa >= beta) {
-                    return beta;
+                    nuevaBeta = Math.min(nuevaBeta, minimax(aux, movPrincipalActual, profundidad - 1, alfa, beta, true));
+                    beta = Math.min(nuevaBeta, beta);
+                    if (alfa >= beta) {
+                        return beta;
+                    }
                 }
             }
+            return nuevaBeta;
         }
-        return nuevaBeta;
     }
 
     public void timeout() {
