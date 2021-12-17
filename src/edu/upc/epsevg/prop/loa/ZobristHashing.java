@@ -20,19 +20,34 @@ import java.awt.Point;
  */
 public class ZobristHashing {
     private int hashValue;
-    private final int [][][] tablero;
+    private final int[][][] tablero;
     
-    @SuppressWarnings("MathRandomCastToInt")
-    public ZobristHashing(int mida){
-        this.tablero = new int[mida][mida][2];
-        for (int[][] tablero1 : this.tablero) {
-            for (int j = 0; j < mida; j++) {
-                for (int k = 0; k < mida; k++) {
-                    tablero1[j][k] = (int) Math.random();
+    public ZobristHashing(GameStatus gs){
+        this.hashValue = 0;
+        
+        int mida = gs.getSize();
+        this.tablero = new int[mida][mida][3];
+        
+        for(int i = 0; i < mida; i++) {
+            for(int j = 0; j < mida; j++) {
+                for(int k = 0; k < 2; k++) {
+                    this.tablero[i][j][k] = (int)(Math.random() * 1069);
                 }
             }
         }
-        this.hashValue = 0;
+        
+        int numPiezas = gs.getNumberOfPiecesPerColor(CellType.PLAYER1);
+        for (int i = 0; i < numPiezas; i++) {
+            Point pieza = gs.getPiece(CellType.PLAYER1, i);
+            this.hashValue ^= this.tablero[CellType.toColor01(CellType.PLAYER1)][pieza.x][pieza.y];
+        }
+        
+        numPiezas = gs.getNumberOfPiecesPerColor(CellType.PLAYER2);
+        for (int i = 0; i < numPiezas; i++) {
+            Point pieza = gs.getPiece(CellType.PLAYER2, i);
+            this.hashValue ^= this.tablero[CellType.toColor01(CellType.PLAYER2)][pieza.x][pieza.y];
+        }
+        
     }
     
     public int update(int color, int x, int y){
@@ -45,28 +60,5 @@ public class ZobristHashing {
     
     public int remove(CellType c, Point p) {
         return this.update(CellType.toColor01(c), p.x, p.y);
-    }
-    
-    @Override
-    public int hashCode() {
-        return this.hashValue;
-    }
-
-    @Override
-    public boolean equals(Object obj) {
-        if (this == obj) {
-            return true;
-        }
-        if (obj == null) {
-            return false;
-        }
-        if (getClass() != obj.getClass()) {
-            return false;
-        }
-        return this.hashValue == ((ZobristHashing)obj).hashValue;
-    }
-    
-    public void sethashCode(int hash) {
-        this.hashValue = hash;
-    }
+    }   
 }

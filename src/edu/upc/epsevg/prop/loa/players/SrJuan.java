@@ -2,6 +2,7 @@ package edu.upc.epsevg.prop.loa.players;
 
 import edu.upc.epsevg.prop.loa.CellType;
 import edu.upc.epsevg.prop.loa.GameStatus;
+import edu.upc.epsevg.prop.loa.GameStatusAdv;
 import edu.upc.epsevg.prop.loa.IAuto;
 import edu.upc.epsevg.prop.loa.IPlayer;
 import edu.upc.epsevg.prop.loa.Move;
@@ -10,38 +11,6 @@ import java.awt.Point;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Callable;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-
-class Pair<U, V> {
-
-    private final U first;
-    private final V second;
-
-    // Constructs a new pair with specified values
-    Pair(U first, V second) {
-        this.first = first;
-        this.second = second;
-    }
-
-    @Override
-    public String toString() {
-        return "(" + first + ", " + second + ")";
-    }
-
-    public U getFirst() {
-        return first;
-    }
-
-    public V getSecond() {
-        return second;
-    }
-}
-
-enum QuadType {
-    Q1, Q2, Q3, Q4, Qd;
-}
 
 public class SrJuan implements IPlayer, IAuto {
 
@@ -65,7 +34,10 @@ public class SrJuan implements IPlayer, IAuto {
     }
 
     @Override
-    public Move move(GameStatus gs) {
+    public Move move(GameStatus gsOrg) {
+        
+        GameStatusAdv gs = new GameStatusAdv(gsOrg);
+               
         this.timeout = false;
         this.heurEnemigo = 0.0D;
 
@@ -73,12 +45,12 @@ public class SrJuan implements IPlayer, IAuto {
             this.nuestroCell = gs.getCurrentPlayer();
             this.enemigoCell = CellType.opposite(this.nuestroCell);
         }
-        Pair<Move, Double> test;
+        Pair<Move, Double> resultMovement;
         switch (this.executionType) {
             case MINIMAX_IDS: {
                 try {
-                    test = obtenerMovimiento_IDS(gs);
-                    return test.getFirst();
+                    resultMovement = obtenerMovimiento_IDS(gs);
+                    return resultMovement.getFirst();
                 } catch (RuntimeException ex) {
                     System.out.println(ex.getMessage());
                     Point pieza = gs.getPiece(this.enemigoCell, 0);
@@ -88,21 +60,29 @@ public class SrJuan implements IPlayer, IAuto {
             }
             default:
             case MINIMAX: {
-                test = obtenerMovimiento(gs, this.profundidadMax);
-                return test.getFirst();
+                try {
+                    resultMovement = obtenerMovimiento(gs, this.profundidadMax);
+                    return resultMovement.getFirst();
+                } catch (RuntimeException ex) {
+                    System.out.println(ex.getMessage());
+                    Point pieza = gs.getPiece(this.enemigoCell, 0);
+                    ArrayList<Point> movimiento = gs.getMoves(pieza);
+                    return new Move(pieza, movimiento.get(0), 0, 0, SearchType.MINIMAX);
+                }
+                
             }
         }
     }
 
-    private QuadType evalQuad(GameStatus gs, Point ini) {
+    private QuadType evalQuad(GameStatusAdv gs, Point ini) {
+        int mida = gs.getSize();
         boolean[] type = {false, false, false, false};
         int fichas = 0;
         int count = 0;
         Point principio = ini;
         for (int i = principio.x; i < principio.x + 1; i++) {
             for (int j = principio.y; j < principio.y + 1; j++) {
-                if (i >= 0 && i < 8 && j >= 0 && j < 8
-                        && gs.getPos(i, j) == this.nuestroCell) {
+                if (i >= 0 && i < mida && j >= 0 && j < mida && gs.getPos(i, j) == this.nuestroCell) {
                     type[count] = true;
                     fichas++;
                 }
@@ -132,7 +112,7 @@ public class SrJuan implements IPlayer, IAuto {
         }
     }
 
-    private void getQuads(GameStatus gs, Point act) {
+    private void getQuads(GameStatusAdv gs, Point act) {
         for (int i = -1; i <= 0; i++) {
             for (int j = -1; j <= 0; j++) {
                 Point ini = new Point(act.x + i, act.y + j);
@@ -146,7 +126,7 @@ public class SrJuan implements IPlayer, IAuto {
         }
     }
 
-    private double distanceToCenter(GameStatus gs, Point act) {
+    private double distanceToCenter(GameStatusAdv gs, Point act) {
         double xCenter = (gs.getSize() / 2.0F);
         double yCenter = (gs.getSize() / 2.0F);
         double x = act.x;
@@ -156,7 +136,7 @@ public class SrJuan implements IPlayer, IAuto {
         return Math.sqrt(Math.pow(xDist, 2.0D) + Math.pow(yDist, 2.0D));
     }
 
-    private double evalTablero(GameStatus gs) {
+    private double evalTablero(GameStatusAdv gs) {
 
         double heurNuestro;
 
@@ -170,14 +150,14 @@ public class SrJuan implements IPlayer, IAuto {
         try {
             calcHeurEnemigo.join();
         } catch (InterruptedException ex) {
-            Logger.getLogger(SrJuan.class.getName()).log(Level.SEVERE, null, ex);
+            System.out.println("Catch: " + ex.getMessage());
         }
         
         if (heurNuestro > this.heurEnemigo){
             return heurNuestro;
         }
         else if (heurNuestro == this.heurEnemigo){
-            return heurNuestro-(0.25 * this.heurEnemigo);
+            return heurNuestro - (0.25 * this.heurEnemigo);
         }
         else{
             return heurNuestro / this.heurEnemigo;
@@ -185,7 +165,7 @@ public class SrJuan implements IPlayer, IAuto {
 
     }
 
-    private double calcEvalTablero(GameStatus gs, CellType jugador) {
+    private double calcEvalTablero(GameStatusAdv gs, CellType jugador) {
         this.quadsMap = new HashMap<>();
         double heurVal = 0.0D;
         int numPiezas = gs.getNumberOfPiecesPerColor(jugador);
@@ -212,7 +192,7 @@ public class SrJuan implements IPlayer, IAuto {
         return (heurVal / 4.0D) / (distanceCenterTotal / numPiezas);
     }
 
-    private Pair<Move, Double> obtenerMovimiento_IDS(GameStatus gs) {
+    private Pair<Move, Double> obtenerMovimiento_IDS(GameStatusAdv gs) {
         int i = 1;
         Pair<Move, Double> mejorMov = null;
         while (!this.timeout) {
@@ -232,7 +212,7 @@ public class SrJuan implements IPlayer, IAuto {
         return mejorMov;
     }
 
-    private Pair<Move, Double> obtenerMovimiento(GameStatus gs, int profundidadMaxima) {
+    private Pair<Move, Double> obtenerMovimiento(GameStatusAdv gs, int profundidadMaxima) {
         double mejorHeur = Double.NEGATIVE_INFINITY;
         Move mejorMovimiento = null;
         int piezasRestantes = gs.getNumberOfPiecesPerColor(this.nuestroCell);
@@ -242,10 +222,15 @@ public class SrJuan implements IPlayer, IAuto {
             for (Point movimiento : movimientos) {
                 Move movimientoActual = new Move(pieza, movimiento, 0, 0, this.executionType);
                 double alfa = Double.NEGATIVE_INFINITY;
-                GameStatus aux = new GameStatus(gs);
+                GameStatusAdv aux = new GameStatusAdv(gs);
                 aux.movePiece(pieza, movimiento);
                 if (aux.isGameOver()) {
-                    return new Pair<>(movimientoActual, Double.POSITIVE_INFINITY);
+                    if (aux.GetWinner() == this.nuestroCell) {
+                        return new Pair<>(movimientoActual, Double.POSITIVE_INFINITY);
+                    }
+                    else {
+                        continue;
+                    }
                 }
                 if (this.timeout && this.executionType == SearchType.MINIMAX_IDS) {
                     throw new RuntimeException("Timeout obtenerMov");
@@ -265,7 +250,7 @@ public class SrJuan implements IPlayer, IAuto {
         return new Pair(mejorMovimiento, mejorHeur);
     }
 
-    private double minimax(GameStatus gs, Move movPrincipalActual, int profundidad, Double alfa, Double beta, boolean isMax) {
+    private double minimax(GameStatusAdv gs, Move movPrincipalActual, int profundidad, Double alfa, Double beta, boolean isMax) {
         if (this.timeout && this.executionType == SearchType.MINIMAX_IDS) {
             throw new RuntimeException("Timeout minimax");
         }
@@ -280,7 +265,7 @@ public class SrJuan implements IPlayer, IAuto {
                 Point pieza = gs.getPiece(this.nuestroCell, k);
                 ArrayList<Point> movimientos = gs.getMoves(pieza);
                 for (Point movimiento : movimientos) {
-                    GameStatus aux = new GameStatus(gs);
+                    GameStatusAdv aux = new GameStatusAdv(gs);
                     aux.movePiece(pieza, movimiento);
                     if (aux.isGameOver()) {
                         if (aux.GetWinner() == this.nuestroCell) {
@@ -303,7 +288,7 @@ public class SrJuan implements IPlayer, IAuto {
             Point pieza = gs.getPiece(this.enemigoCell, i);
             ArrayList<Point> movimientos = gs.getMoves(pieza);
             for (Point movimiento : movimientos) {
-                GameStatus aux = new GameStatus(gs);
+                GameStatusAdv aux = new GameStatusAdv(gs);
                 aux.movePiece(pieza, movimiento);
                 if (aux.isGameOver()) {
                     if (aux.GetWinner() == this.nuestroCell) {

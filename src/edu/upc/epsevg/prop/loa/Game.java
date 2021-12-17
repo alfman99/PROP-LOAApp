@@ -23,12 +23,12 @@ public class Game {
                 
                 //IPlayer player1 = new HumanPlayer("Octopus");
                 // IPlayer player1 = new RandomPlayer("Crazy Chris");
-                IPlayer player1 = new SrJuan(SearchType.MINIMAX_IDS, 6);
-                IPlayer player2 = new RandomPlayer("Crazy Ivan");
-                IPlayer player3 =  new MCCloudPlayer();
+                IPlayer player1 = new SrJuanIDS();
+                // IPlayer player1 = new SrJuan(SearchType.MINIMAX_IDS, 4);
+                IPlayer player2 =  new MCCloudPlayer();
 
                                 
-                new Board(player3 , player1, 10, Level.DIFFICULT);
+                new Board(player1 , player2, 10, Level.DIFFICULT);
              }
         });
     }
