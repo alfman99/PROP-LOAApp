@@ -5,14 +5,17 @@
  */
 package edu.upc.epsevg.prop.loa.players;
 
+import edu.upc.epsevg.prop.loa.Move;
+import edu.upc.epsevg.prop.loa.SearchType;
+
 /**
  *
  * @author alehe
  */
-public class Info {
+public class InfoPropio {
     private int nodesExplored;
-    private int depth;
-    private double heur;
+    private final int depth;
+    private final double heur;
 
     public int getNumerOfNodesExplored() {
         return nodesExplored;
@@ -26,19 +29,8 @@ public class Info {
         return depth;
     }
 
-    public void setMaxDepthReached(int depth) {
-        this.depth = depth;
-    }
-
-    public double getHeur() {
-        return heur;
-    }
-
-    public void setHeur(double heur) {
-        this.heur = heur;
-    }
-
-    public Info(int nodesExplored, int depth, double heur) {
+    
+    public InfoPropio(int nodesExplored, int depth, double heur) {
         this.nodesExplored = nodesExplored;
         this.depth = depth;
         this.heur = heur;

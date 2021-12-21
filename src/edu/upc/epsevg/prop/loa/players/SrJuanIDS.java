@@ -2,16 +2,17 @@ package edu.upc.epsevg.prop.loa.players;
 
 import edu.upc.epsevg.prop.loa.CellType;
 import edu.upc.epsevg.prop.loa.GameStatus;
-import edu.upc.epsevg.prop.loa.GameStatusAdv;
+import edu.upc.epsevg.prop.loa.GameStatus;
 import edu.upc.epsevg.prop.loa.IAuto;
 import edu.upc.epsevg.prop.loa.IPlayer;
 import edu.upc.epsevg.prop.loa.Move;
 import edu.upc.epsevg.prop.loa.SearchType;
+import edu.upc.epsevg.prop.loa.ZobristHashingPropio;
 import java.awt.Point;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.Callable;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
@@ -22,9 +23,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
     private boolean timeout;
     private HashMap<QuadType, Integer> quadsMap;
     private int totalNodes;
-
-    // para la paralelización
-    private double heurEnemigo;
+    private final ZobristHashingPropio hashing;
 
     public SrJuanIDS() {
         this.nuestroCell = CellType.EMPTY;
@@ -32,15 +31,13 @@ public class SrJuanIDS implements IPlayer, IAuto {
         this.timeout = false;
         this.quadsMap = new HashMap<>();
         this.totalNodes = 0;
+        this.hashing = new ZobristHashingPropio(8);
     }
 
     @Override
-    public Move move(GameStatus gsOrg) {
-        
-        GameStatusAdv gs = new GameStatusAdv(gsOrg);
-        
+    public Move move(GameStatus gs) {
+                        
         this.timeout = false;
-        this.heurEnemigo = 0.0D;
         this.totalNodes = 0;
 
         if (this.nuestroCell == CellType.EMPTY || this.enemigoCell == CellType.EMPTY) {
@@ -59,7 +56,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
         }
     }
 
-    private QuadType evalQuad(GameStatusAdv gs, Point ini) {
+    private QuadType evalQuad(GameStatus gs, Point ini, CellType jugador) {
         boolean[] type = {false, false, false, false};
         int fichas = 0;
         int count = 0;
@@ -67,7 +64,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
         for (int i = principio.x; i < principio.x + 1; i++) {
             for (int j = principio.y; j < principio.y + 1; j++) {
                 if (i >= 0 && i < 8 && j >= 0 && j < 8
-                        && gs.getPos(i, j) == this.nuestroCell) {
+                        && gs.getPos(i, j) == jugador) {
                     type[count] = true;
                     fichas++;
                 }
@@ -97,11 +94,11 @@ public class SrJuanIDS implements IPlayer, IAuto {
         }
     }
 
-    private void getQuads(GameStatusAdv gs, Point act) {
+    private void getQuads(GameStatus gs, Point act, CellType jugador) {
         for (int i = -1; i <= 0; i++) {
             for (int j = -1; j <= 0; j++) {
                 Point ini = new Point(act.x + i, act.y + j);
-                QuadType eval = evalQuad(gs, ini);
+                QuadType eval = evalQuad(gs, ini, jugador);
                 if (this.quadsMap.containsKey(eval)) {
                     this.quadsMap.put(eval, (this.quadsMap.get(eval)) + 1);
                 } else {
@@ -111,7 +108,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
         }
     }
 
-    private double distanceToCenter(GameStatusAdv gs, Point act) {
+    private double distanceToCenter(GameStatus gs, Point act) {
         double xCenter = (gs.getSize() / 2.0F);
         double yCenter = (gs.getSize() / 2.0F);
         double x = act.x;
@@ -121,36 +118,54 @@ public class SrJuanIDS implements IPlayer, IAuto {
         return Math.sqrt(Math.pow(xDist, 2.0D) + Math.pow(yDist, 2.0D));
     }
 
-    private double evalTablero(GameStatusAdv gs) {
+    private double evalTablero(GameStatus gs) {
 
-        double heurNuestro;
-
-        Thread calcHeurEnemigo = new Thread(() -> {
-            this.heurEnemigo = calcEvalTablero(gs, this.enemigoCell);
-        });
-        calcHeurEnemigo.start();
-
-        heurNuestro = calcEvalTablero(gs, this.nuestroCell);
-
-        try {
-            calcHeurEnemigo.join();
-        } catch (InterruptedException ex) {
-            Logger.getLogger(SrJuan.class.getName()).log(Level.SEVERE, null, ex);
-        }
         
-        if (heurNuestro > this.heurEnemigo){
-            return heurNuestro;
-        }
-        else if (heurNuestro == this.heurEnemigo){
-            return heurNuestro-(0.25 * this.heurEnemigo);
-        }
-        else{
-            return heurNuestro / this.heurEnemigo;
-        }
+        double heurEnemigo = calcEvalTablero(gs, this.enemigoCell);
+        double heurNuestro = calcEvalTablero(gs, this.nuestroCell);
+                        
+        return heurNuestro - heurEnemigo;
 
     }
 
-    private double calcEvalTablero(GameStatusAdv gs, CellType jugador) {
+    private int numberOfComponentsOnBoard(GameStatus gs, CellType cell) {
+      CellType[][] board = new CellType[gs.getSize()][gs.getSize()];
+      for (int i = 0; i < gs.getSize(); i++) {
+        for (int j = 0; j < gs.getSize(); j++) {
+          board[i][j] = gs.getPos(i, j);
+        }
+      }
+      int count = 0;
+      for (int i = 0; i < gs.getSize(); i++) {
+        for (int j = 0; j < gs.getSize(); j++) {
+          if (board[i][j] == cell) {
+            // remove cells from board using flood fill
+            floodFill(board, i, j, cell);
+            count++;
+          }
+        }
+      }
+      return count;
+    }
+
+    private void floodFill(CellType[][] board, int x, int y, CellType cell) {
+      if (x < 0 || x >= board.length || y < 0 || y >= board.length) {
+        return;
+      }
+      if (board[x][y] == cell) {
+        board[x][y] = CellType.EMPTY;
+        floodFill(board, x - 1, y, cell);
+        floodFill(board, x + 1, y, cell);
+        floodFill(board, x, y - 1, cell);
+        floodFill(board, x, y + 1, cell);
+        floodFill(board, x - 1, y - 1, cell);
+        floodFill(board, x + 1, y + 1, cell);
+        floodFill(board, x - 1, y + 1, cell);
+        floodFill(board, x + 1, y - 1, cell);
+      }
+    }
+
+    private double calcEvalTablero(GameStatus gs, CellType jugador) {
         this.quadsMap = new HashMap<>();
         double heurVal = 0.0D;
         int numPiezas = gs.getNumberOfPiecesPerColor(jugador);
@@ -158,7 +173,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
         for (int i = 0; i < numPiezas; i++) {
             Point pieza = gs.getPiece(jugador, i);
             distanceCenterTotal += distanceToCenter(gs, pieza);
-            getQuads(gs, pieza);
+            /*getQuads(gs, pieza, jugador);
             for (Map.Entry<QuadType, Integer> entry : this.quadsMap.entrySet()) {
                 switch (entry.getKey()) {
                     case Q1:
@@ -171,13 +186,16 @@ public class SrJuanIDS implements IPlayer, IAuto {
                         heurVal -= 2 * entry.getValue();
                         continue;
                 }
-            }
+            }*/
         }
-
-        return (heurVal / 4.0D) / (distanceCenterTotal / numPiezas);
+        
+        int numComponentes = this.numberOfComponentsOnBoard(gs, jugador);
+        
+        return - distanceCenterTotal - numComponentes;
+        // return -heurVal/4.0D;
     }
 
-    private Pair<Move, Double> obtenerMovimiento_IDS(GameStatusAdv gs) {
+    private Pair<Move, Double> obtenerMovimiento_IDS(GameStatus gs) {
         int i = 1;
         Pair<Move, Double> mejorMov = null;
         while (!this.timeout) {
@@ -195,10 +213,11 @@ public class SrJuanIDS implements IPlayer, IAuto {
         if (mejorMov == null) {
             throw new RuntimeException("No se ha completado ni el primer nivel IDS");
         }
+        System.out.println("heur: " + mejorMov.getSecond());
         return mejorMov;
     }
 
-    private Pair<Move, Double> obtenerMovimiento(GameStatusAdv gs, int profundidadMaxima) {
+    private Pair<Move, Double> obtenerMovimiento(GameStatus gs, int profundidadMaxima) {
         double mejorHeur = Double.NEGATIVE_INFINITY;
         Move mejorMovimiento = null;
         int piezasRestantes = gs.getNumberOfPiecesPerColor(this.nuestroCell);
@@ -208,7 +227,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
             for (Point movimiento : movimientos) {
                 Move movimientoActual = new Move(pieza, movimiento, 0, 0, SearchType.MINIMAX_IDS);
                 double alfa = Double.NEGATIVE_INFINITY;
-                GameStatusAdv aux = new GameStatusAdv(gs);
+                GameStatus aux = new GameStatus(gs);
                 aux.movePiece(pieza, movimiento);
                 if (aux.isGameOver()) {
                     if (aux.GetWinner() == this.nuestroCell) {
@@ -222,7 +241,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
                     throw new RuntimeException("Timeout obtenerMov");
                 }
                 try {
-                    alfa = minimax(aux, movimientoActual, profundidadMaxima - 1, mejorHeur, Double.POSITIVE_INFINITY, false);
+                    alfa = minimax(aux, profundidadMaxima - 1, mejorHeur, Double.POSITIVE_INFINITY, false);
                 } catch (RuntimeException ex) {
                     throw new RuntimeException(ex.getMessage());
                 }
@@ -236,66 +255,91 @@ public class SrJuanIDS implements IPlayer, IAuto {
         return new Pair(mejorMovimiento, mejorHeur);
     }
 
-    private double minimax(GameStatusAdv gs, Move movPrincipalActual, int profundidad, Double alfa, Double beta, boolean isMax) {
+    interface MinOMax {
+        double minOMax(double a, double b);
+    }
+    
+    private double minimax(GameStatus gs, int profundidad, Double alfa, Double beta, boolean isMax) {
+                
+        MinOMax func;
+        
         if (this.timeout) {
             throw new RuntimeException("Timeout minimax");
         }
         if (profundidad <= 0) {
             this.totalNodes++;
-            return evalTablero(gs);
+            double tmp = evalTablero(gs);
+            this.hashing.update(gs, tmp, profundidad);
+            return tmp;
         }
+        
+        double nuevoValor;
+        int j;
+        
         if (isMax) {
-            double nuevaAlfa = Double.NEGATIVE_INFINITY;
-            int j = gs.getNumberOfPiecesPerColor(this.nuestroCell);
-            for (int k = 0; k < j; k++) {
-                Point pieza = gs.getPiece(this.nuestroCell, k);
-                ArrayList<Point> movimientos = gs.getMoves(pieza);
-                for (Point movimiento : movimientos) {
-                    GameStatusAdv aux = new GameStatusAdv(gs);
-                    aux.movePiece(pieza, movimiento);
-                    if (aux.isGameOver()) {
-                        if (aux.GetWinner() == this.nuestroCell) {
-                            return Double.POSITIVE_INFINITY;
-                        }
-                        return Double.NEGATIVE_INFINITY;
+            func = Math::max;
+            j = gs.getNumberOfPiecesPerColor(this.nuestroCell);
+            nuevoValor = Double.NEGATIVE_INFINITY;
+        }
+        else {
+            func = Math::min;
+            j = gs.getNumberOfPiecesPerColor(this.enemigoCell);
+            nuevoValor = Double.POSITIVE_INFINITY;
+        }
+        
+        
+        for (int k = 0; k < j; k++) {
+            Point pieza;
+            if (isMax) {
+                pieza = gs.getPiece(this.nuestroCell, k);
+            }
+            else {
+                pieza = gs.getPiece(this.enemigoCell, k);
+            }
+            ArrayList<Point> movimientos = gs.getMoves(pieza);
+            for (Point movimiento : movimientos) {
+                GameStatus aux = new GameStatus(gs);
+                aux.movePiece(pieza, movimiento);
+                var eval = this.hashing.evaluate(gs, profundidad);
+                if (eval != null) {
+                    // System.out.println("Zobrist triggered");
+                    this.totalNodes++;
+                    return eval.heur;
+                }
+                if (aux.isGameOver()) {
+                    if (aux.GetWinner() == this.nuestroCell) {
+                        return Double.POSITIVE_INFINITY;
                     }
-                    nuevaAlfa = Math.max(nuevaAlfa, minimax(aux, movPrincipalActual, profundidad - 1, alfa, beta, false));
-                    alfa = Math.max(nuevaAlfa, alfa);
-                    if (alfa >= beta) {
+                    return Double.NEGATIVE_INFINITY;
+                }
+                nuevoValor = func.minOMax(nuevoValor, minimax(aux, profundidad - 1, alfa, beta, !isMax));
+                
+                if (isMax) {
+                    alfa = func.minOMax(nuevoValor, alfa);
+                    if (nuevoValor >= beta) {
+                        this.hashing.update(gs, alfa, profundidad);
                         return alfa;
                     }
                 }
-            }
-            return nuevaAlfa;
-        }
-        double nuevaBeta = Double.POSITIVE_INFINITY;
-        int piezasRestantes = gs.getNumberOfPiecesPerColor(this.enemigoCell);
-        for (int i = 0; i < piezasRestantes; i++) {
-            Point pieza = gs.getPiece(this.enemigoCell, i);
-            ArrayList<Point> movimientos = gs.getMoves(pieza);
-            for (Point movimiento : movimientos) {
-                GameStatusAdv aux = new GameStatusAdv(gs);
-                aux.movePiece(pieza, movimiento);
-                if (aux.isGameOver()) {
-                    if (aux.GetWinner() == this.nuestroCell) {
-                        return Double.NEGATIVE_INFINITY;
+                else {
+                    beta = func.minOMax(nuevoValor, beta);
+                    if (alfa >= nuevoValor) {
+                        this.hashing.update(gs, beta, profundidad);
+                        return beta;
                     }
-                    return Double.POSITIVE_INFINITY;
-                }
-                nuevaBeta = Math.min(nuevaBeta, minimax(aux, movPrincipalActual, profundidad - 1, alfa, beta, true));
-                beta = Math.min(nuevaBeta, beta);
-                if (alfa >= beta) {
-                    return beta;
                 }
             }
         }
-        return nuevaBeta;
+        this.hashing.update(gs, nuevoValor, profundidad);
+        return nuevoValor;
     }
 
+    @Override
     public void timeout() {
         this.timeout = true;
     }
 
+    @Override
     public String getName() {
         return "Sr Juan";
     }
