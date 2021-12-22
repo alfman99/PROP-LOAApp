@@ -26,7 +26,7 @@ public class Game {
                 IPlayer player2 = new MCCloudPlayer();
 
                                 
-                new Board(player1 , player2, 10, Level.DIFFICULT);
+                new Board(player1 , player2, 1, Level.DIFFICULT);
              }
         });
     }

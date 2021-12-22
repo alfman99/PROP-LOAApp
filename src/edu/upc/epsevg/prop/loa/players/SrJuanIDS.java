@@ -2,36 +2,59 @@ package edu.upc.epsevg.prop.loa.players;
 
 import edu.upc.epsevg.prop.loa.CellType;
 import edu.upc.epsevg.prop.loa.GameStatus;
-import edu.upc.epsevg.prop.loa.GameStatus;
 import edu.upc.epsevg.prop.loa.IAuto;
 import edu.upc.epsevg.prop.loa.IPlayer;
 import edu.upc.epsevg.prop.loa.Move;
 import edu.upc.epsevg.prop.loa.SearchType;
 import edu.upc.epsevg.prop.loa.ZobristHashingPropio;
 import java.awt.Point;
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.PrintStream;
 import java.util.ArrayList;
-import java.util.Comparator;
-import java.util.HashMap;
-import java.util.Map;
-import java.util.logging.Level;
-import java.util.logging.Logger;
 
 public class SrJuanIDS implements IPlayer, IAuto {
 
     private CellType nuestroCell;
     private CellType enemigoCell;
     private boolean timeout;
-    private HashMap<QuadType, Integer> quadsMap;
+    // private HashMap<QuadType, Integer> quadsMap;
     private int totalNodes;
     private final ZobristHashingPropio hashing;
+    
+    // Cositas extra
+    private final boolean hashingActivado;
+    private final boolean estadisticas;
+    private int estadisticaTirada; // Para hacer las estadisticas
 
     public SrJuanIDS() {
         this.nuestroCell = CellType.EMPTY;
         this.enemigoCell = CellType.EMPTY;
         this.timeout = false;
-        this.quadsMap = new HashMap<>();
+        // this.quadsMap = new HashMap<>();
         this.totalNodes = 0;
         this.hashing = new ZobristHashingPropio(8);
+        
+         // Cositas extra
+        this.hashingActivado = true;
+        this.estadisticas = true;
+        this.estadisticaTirada = 1;
+        
+        if (this.estadisticas) {
+            // Ruta donde quieres guardar las estadisticas, cambiar.
+            String name = "C:\\Users\\srimp\\Documents\\Universidad\\PROP\\Actividades\\PROP-LOAApp\\estadisticas\\sin hashing 1 segundo\\partida10H.txt";
+            try {
+                File tmp = new File(name);
+                tmp.createNewFile();
+                PrintStream out = new PrintStream(new FileOutputStream(name));
+                System.setOut(out);
+            }
+            catch (Exception ex) {
+                System.out.println(ex.getMessage());
+            }
+        }
+        
     }
 
     @Override
@@ -47,6 +70,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
         Pair<Move, Double> test;
         try {
             test = obtenerMovimiento_IDS(gs);
+            if (this.estadisticas) this.estadisticaTirada++; // Para hacer las estadisticas
             return test.getFirst();
         } catch (RuntimeException ex) {
             // System.out.println(ex.getMessage());
@@ -94,7 +118,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
         }
     }
 
-    private void getQuads(GameStatus gs, Point act, CellType jugador) {
+    /*private void getQuads(GameStatus gs, Point act, CellType jugador) {
         for (int i = -1; i <= 0; i++) {
             for (int j = -1; j <= 0; j++) {
                 Point ini = new Point(act.x + i, act.y + j);
@@ -106,7 +130,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
                 }
             }
         }
-    }
+    }*/
 
     private double distanceToCenter(GameStatus gs, Point act) {
         double xCenter = (gs.getSize() / 2.0F);
@@ -166,8 +190,8 @@ public class SrJuanIDS implements IPlayer, IAuto {
     }
 
     private double calcEvalTablero(GameStatus gs, CellType jugador) {
-        this.quadsMap = new HashMap<>();
-        double heurVal = 0.0D;
+        // this.quadsMap = new HashMap<>();
+        // double heurVal = 0.0D;
         int numPiezas = gs.getNumberOfPiecesPerColor(jugador);
         double distanceCenterTotal = 0.0D;
         for (int i = 0; i < numPiezas; i++) {
@@ -213,7 +237,8 @@ public class SrJuanIDS implements IPlayer, IAuto {
         if (mejorMov == null) {
             throw new RuntimeException("No se ha completado ni el primer nivel IDS");
         }
-        System.out.println("heur: " + mejorMov.getSecond());
+        if (this.estadisticas) System.out.println(this.estadisticaTirada + ":" + this.totalNodes + ":" + mejorMov.getFirst().getMaxDepthReached()); // Para hacer las estadisticas
+        // System.out.println("heur: " + mejorMov.getSecond()); // Debug stuff
         return mejorMov;
     }
 
@@ -269,7 +294,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
         if (profundidad <= 0) {
             this.totalNodes++;
             double tmp = evalTablero(gs);
-            this.hashing.update(gs, tmp, profundidad);
+            if (hashingActivado) this.hashing.update(gs, tmp, profundidad);
             return tmp;
         }
         
@@ -300,11 +325,13 @@ public class SrJuanIDS implements IPlayer, IAuto {
             for (Point movimiento : movimientos) {
                 GameStatus aux = new GameStatus(gs);
                 aux.movePiece(pieza, movimiento);
-                var eval = this.hashing.evaluate(gs, profundidad);
-                if (eval != null) {
-                    // System.out.println("Zobrist triggered");
-                    this.totalNodes++;
-                    return eval.heur;
+                if (hashingActivado) {
+                    var eval = this.hashing.evaluate(gs, profundidad);
+                    if (eval != null) {
+                        // System.out.println("Zobrist triggered");
+                        this.totalNodes++;
+                        return eval.heur;
+                    }
                 }
                 if (aux.isGameOver()) {
                     if (aux.GetWinner() == this.nuestroCell) {
@@ -317,20 +344,20 @@ public class SrJuanIDS implements IPlayer, IAuto {
                 if (isMax) {
                     alfa = func.minOMax(nuevoValor, alfa);
                     if (nuevoValor >= beta) {
-                        this.hashing.update(gs, alfa, profundidad);
+                        if (this.hashingActivado) this.hashing.update(gs, alfa, profundidad);
                         return alfa;
                     }
                 }
                 else {
                     beta = func.minOMax(nuevoValor, beta);
                     if (alfa >= nuevoValor) {
-                        this.hashing.update(gs, beta, profundidad);
+                        if (this.hashingActivado) this.hashing.update(gs, beta, profundidad);
                         return beta;
                     }
                 }
             }
         }
-        this.hashing.update(gs, nuevoValor, profundidad);
+        if (this.hashingActivado) this.hashing.update(gs, nuevoValor, profundidad);
         return nuevoValor;
     }
 

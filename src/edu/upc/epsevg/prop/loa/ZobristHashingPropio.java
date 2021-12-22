@@ -66,8 +66,6 @@ public class ZobristHashingPropio {
         if (this.InfoTabla.containsKey(hash)) {
             Evaluacion info = this.InfoTabla.get(hash);
             if (info.profundidad >= profundidad) {
-                if (profundidad >= 4)
-                    System.out.println(profundidad);
                 return info;
             }
         }
