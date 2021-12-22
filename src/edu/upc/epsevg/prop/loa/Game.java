@@ -21,7 +21,7 @@ public class Game {
                 
                 //IPlayer player1 = new HumanPlayer("Octopus");
                 // IPlayer player1 = new RandomPlayer("Crazy Chris");
-                IPlayer player1 = new SrJuanIDS();
+                IPlayer player1 = new SrJuanIDS(SearchType.MINIMAX, 1);
                 // IPlayer player1 = new SrJuan(SearchType.MINIMAX_IDS, 4);
                 IPlayer player2 = new MCCloudPlayer();
 

@@ -9,37 +9,97 @@ import edu.upc.epsevg.prop.loa.SearchType;
 import edu.upc.epsevg.prop.loa.ZobristHashingPropio;
 import java.awt.Point;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileOutputStream;
 import java.io.PrintStream;
 import java.util.ArrayList;
 
 public class SrJuanIDS implements IPlayer, IAuto {
 
+    /**
+     * Tipo de Cell que tiene nuestro jugador
+     */
     private CellType nuestroCell;
+    
+    /**
+     * Tipo de Cell que tiene el jugador enemigo
+     */
     private CellType enemigoCell;
+    
+    /**
+     * Indicador que nos hace salir del calculo del IDS una vez es igual a true
+     */
     private boolean timeout;
+    
     // private HashMap<QuadType, Integer> quadsMap;
+    
+    /**
+     * Numero total de nodos explorados en el calculo del minimax en un movimiento
+     */
     private int totalNodes;
+    
+    /**
+     * Logica de todo el hashing
+     */
     private final ZobristHashingPropio hashing;
     
+    /**
+     * Tipo de busqueda que estamos usando:
+     *  Minimax
+     *  Minimax_IDS
+     */
+    private final SearchType tipoBusqueda;
+    
+    /**
+     * Profundidad maxima que queremos alcanzar en el tipo de busqueda Minimax
+     */
+    private final int profundiadMax;
+    
     // Cositas extra
+    /**
+     * Activar o desactivar el hashing
+     */
     private final boolean hashingActivado;
+    
+    /**
+     * Activar o desactivar el output de las estadisticas
+     */
     private final boolean estadisticas;
+    
+    /**
+     * Activar o desactivar el output de las estadisticas del tiempo
+     */
+    private final boolean estadisticasTiempo;
+    
+    /**
+     * Variable que se utilizar para almacenar el tiempo de la ejecución del turno en caso
+     * de tener las estadisticasTiempo activadas
+     */
+    private long timeTurn;
+    
+    /**
+     * Cuenta en que tirada estamos encaso de tener las estadisticas activadas
+     */
     private int estadisticaTirada; // Para hacer las estadisticas
 
-    public SrJuanIDS() {
+        
+    public SrJuanIDS(SearchType tipo, int profundidad) {
+                
+        this.tipoBusqueda = tipo;
+        this.profundiadMax = profundidad;
+        this.timeTurn = 0;
+        
         this.nuestroCell = CellType.EMPTY;
         this.enemigoCell = CellType.EMPTY;
         this.timeout = false;
         // this.quadsMap = new HashMap<>();
         this.totalNodes = 0;
-        this.hashing = new ZobristHashingPropio(8);
+        this.hashing = new ZobristHashingPropio(8); // No podemos acceder a la mida del tablero desde el constructor.
         
-         // Cositas extra
+        // Cositas extra
         this.hashingActivado = true;
-        this.estadisticas = true;
+        this.estadisticas = false;
         this.estadisticaTirada = 1;
+        this.estadisticasTiempo = true;
         
         if (this.estadisticas) {
             // Ruta donde quieres guardar las estadisticas, cambiar.
@@ -54,7 +114,6 @@ public class SrJuanIDS implements IPlayer, IAuto {
                 System.out.println(ex.getMessage());
             }
         }
-        
     }
 
     @Override
@@ -67,19 +126,38 @@ public class SrJuanIDS implements IPlayer, IAuto {
             this.nuestroCell = gs.getCurrentPlayer();
             this.enemigoCell = CellType.opposite(this.nuestroCell);
         }
-        Pair<Move, Double> test;
-        try {
-            test = obtenerMovimiento_IDS(gs);
-            if (this.estadisticas) this.estadisticaTirada++; // Para hacer las estadisticas
-            return test.getFirst();
-        } catch (RuntimeException ex) {
-            // System.out.println(ex.getMessage());
-            Point pieza = gs.getPiece(this.enemigoCell, 0);
-            ArrayList<Point> movimiento = gs.getMoves(pieza);
-            return new Move(pieza, movimiento.get(0), 0, 0, SearchType.MINIMAX_IDS);
+                
+        if (this.estadisticasTiempo) this.timeTurn = System.nanoTime();
+        
+        Move test = null;
+        switch(this.tipoBusqueda) {
+            case MINIMAX: {
+                test = obtenerMovimiento(gs, this.profundiadMax).getFirst();
+                if (this.estadisticas) this.estadisticaTirada++; // Para hacer las estadisticas
+                break;
+            }
+            default:
+            case MINIMAX_IDS: {
+                try {
+                    test = obtenerMovimiento_IDS(gs).getFirst();
+                    if (this.estadisticas) this.estadisticaTirada++; // Para hacer las estadisticas
+                } catch (RuntimeException ex) {
+                    System.out.println(ex.getMessage());
+                    System.exit(-1);
+                }
+                break;
+            }
         }
+        
+        if (this.estadisticasTiempo) {
+            this.timeTurn = System.nanoTime() - this.timeTurn;
+            System.out.println("Tiempo en la tirada: " + (this.timeTurn / 1000000) + "ms");
+        }
+        
+        return test;
     }
 
+    /*
     private QuadType evalQuad(GameStatus gs, Point ini, CellType jugador) {
         boolean[] type = {false, false, false, false};
         int fichas = 0;
@@ -117,6 +195,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
             }
         }
     }
+    */
 
     /*private void getQuads(GameStatus gs, Point act, CellType jugador) {
         for (int i = -1; i <= 0; i++) {
@@ -132,6 +211,12 @@ public class SrJuanIDS implements IPlayer, IAuto {
         }
     }*/
 
+    /**
+     * Distancia de un punto al centro del tablero
+     * @param gs Estado del juego
+     * @param act punto del que queremos saber la distancia al centro
+     * @return Distancia al centro del tablero de la pieza act
+     */
     private double distanceToCenter(GameStatus gs, Point act) {
         double xCenter = (gs.getSize() / 2.0F);
         double yCenter = (gs.getSize() / 2.0F);
@@ -142,16 +227,24 @@ public class SrJuanIDS implements IPlayer, IAuto {
         return Math.sqrt(Math.pow(xDist, 2.0D) + Math.pow(yDist, 2.0D));
     }
 
+    /**
+     * Funcion que nos da el valor total del tablero visto desde nuestro jugador
+     * @param gs Estado del juego
+     * @return Valor heuristico del valor del tablero segun los intereses del this.nuestroCell
+     */
     private double evalTablero(GameStatus gs) {
-
-        
         double heurEnemigo = calcEvalTablero(gs, this.enemigoCell);
         double heurNuestro = calcEvalTablero(gs, this.nuestroCell);
                         
         return heurNuestro - heurEnemigo;
-
     }
 
+    /**
+     * Devuelve el numero de componentes en la tabla
+     * @param gs Estado del juego
+     * @param cell Tipo de casilla que queremos ver cuantas componentes hay
+     * @return numero de componentes en el tablero
+     */
     private int numberOfComponentsOnBoard(GameStatus gs, CellType cell) {
       CellType[][] board = new CellType[gs.getSize()][gs.getSize()];
       for (int i = 0; i < gs.getSize(); i++) {
@@ -172,6 +265,12 @@ public class SrJuanIDS implements IPlayer, IAuto {
       return count;
     }
 
+    /**
+     * @param board Estado del tablero
+     * @param x posición X que estamos evaluando
+     * @param y posición Y que estamos evaluando
+     * @param cell Tipo de cell por el que estamos mirando
+     */
     private void floodFill(CellType[][] board, int x, int y, CellType cell) {
       if (x < 0 || x >= board.length || y < 0 || y >= board.length) {
         return;
@@ -189,6 +288,12 @@ public class SrJuanIDS implements IPlayer, IAuto {
       }
     }
 
+    /**
+     * Utilizando el numero de componentes y la distancia al centro del tablero devuelve el valor heuristico del tablero
+     * @param gs Estado del juego
+     * @param jugador Perspectiva del jugador del que queremos calcular la heuristica
+     * @return Valor heuristico del tablero
+     */
     private double calcEvalTablero(GameStatus gs, CellType jugador) {
         // this.quadsMap = new HashMap<>();
         // double heurVal = 0.0D;
@@ -219,6 +324,13 @@ public class SrJuanIDS implements IPlayer, IAuto {
         // return -heurVal/4.0D;
     }
 
+    /**
+     * Mientras que no haya un timeout estará iterando sobre el obtenerMovimiento incrementando la profundidad y
+     * quedandose con el movimiento del ultimo nivel que haya completado, una vez haya un timeout dejará el calculo del 
+     * nivel en el que está trabajando a medias y utilizará el valor del ultimo nivel completado en su totalidad.
+     * @param gs Estado del juego actual 
+     * @return Pair contenido con el mejor movimiento y el valor de la heuristica asociado al movimiento
+     */
     private Pair<Move, Double> obtenerMovimiento_IDS(GameStatus gs) {
         int i = 1;
         Pair<Move, Double> mejorMov = null;
@@ -242,6 +354,12 @@ public class SrJuanIDS implements IPlayer, IAuto {
         return mejorMov;
     }
 
+    /**
+     * Devuelve el mejor movimiento que podríamos hacer dada una profundidad maxima según un minimax y una heuristica
+     * @param gs Estado del juego actual
+     * @param profundidadMaxima Profundidad a la que queremos llegar como maximo
+     * @return Pair contenido con el mejor movimiento y el valor de la heuristica asociado al movimiento
+     */
     private Pair<Move, Double> obtenerMovimiento(GameStatus gs, int profundidadMaxima) {
         double mejorHeur = Double.NEGATIVE_INFINITY;
         Move mejorMovimiento = null;
@@ -262,7 +380,7 @@ public class SrJuanIDS implements IPlayer, IAuto {
                         continue;
                     }
                 }
-                if (this.timeout) {
+                if (this.timeout && this.tipoBusqueda.equals(SearchType.MINIMAX_IDS)) {
                     throw new RuntimeException("Timeout obtenerMov");
                 }
                 try {
@@ -280,15 +398,30 @@ public class SrJuanIDS implements IPlayer, IAuto {
         return new Pair(mejorMovimiento, mejorHeur);
     }
 
+    /**
+     * Interfaz para poder asignarle una función y hacer el minimax todo en uno sin necesidad de usar el negamax
+     */
     interface MinOMax {
         double minOMax(double a, double b);
     }
     
+    /**
+     * Metodo que realiza el desarrollo del árbol heurístico MiniMax de forma 
+     * recursiva. Comprueva el valor máximo si isMax es verdadero y en caso
+     * contrario mira el valor mínimo. Este lo realiza con la poda, para así 
+     * poder evitar cercar ramas innecesarias del árbol. 
+     * @param gs Estado del juego actual en la simulación
+     * @param profundidad Profundidad actual de la simulación, utilizado para hacer cutoff
+     * @param alfa Valor alfa para hacer la poda alfa beta
+     * @param beta Valor beta para hacer la poda alfa beta
+     * @param isMax Para saber si está en una altura donde hay que minimizar o maximizar
+     * @return Valor de la heuristica en el nodo hoja de esa simulación minimax
+     */
     private double minimax(GameStatus gs, int profundidad, Double alfa, Double beta, boolean isMax) {
                 
         MinOMax func;
         
-        if (this.timeout) {
+        if (this.timeout && this.tipoBusqueda.equals(SearchType.MINIMAX_IDS)) {
             throw new RuntimeException("Timeout minimax");
         }
         if (profundidad <= 0) {
